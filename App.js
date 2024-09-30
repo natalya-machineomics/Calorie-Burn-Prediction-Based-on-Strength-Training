@@ -1,70 +1,77 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { OAuth2Client } from 'react-oauth2-code-pkce';
 import axios from 'axios';
 
 function App() {
-  const [exerciseType, setExerciseType] = useState('');
-  const [duration, setDuration] = useState('');
-  const [intensity, setIntensity] = useState('');
-  const [weight, setWeight] = useState('');
-  const [calories, setCalories] = useState(null);
+  const [accessToken, setAccessToken] = useState(null);
+  const [fitbitData, setFitbitData] = useState(null);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    // Send the data to the backend for prediction
-    const data = {
-      exercise_type: exerciseType,
-      duration: parseInt(duration),
-      intensity: intensity,
-      weight: parseInt(weight),
-    };
-    
-    try {
-      const response = await axios.post('http://localhost:5000/predict_calories', data);
-      setCalories(response.data.calories_burned);
-    } catch (error) {
-      console.error('Error predicting calories:', error);
+  const clientId = 'YOUR_FITBIT_CLIENT_ID';
+  const redirectUri = 'http://localhost:3000';
+  const authorizationUri = 'https://www.fitbit.com/oauth2/authorize';
+  const tokenUri = 'https://api.fitbit.com/oauth2/token';
+  const scopes = ['activity', 'heartrate'];
+
+  const authClient = new OAuth2Client({
+    clientId,
+    authorizationUri,
+    tokenUri,
+    redirectUri,
+    scopes,
+  });
+
+  // Handle OAuth redirect after user logs in
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+
+    if (code) {
+      authClient
+        .getAccessToken(code)
+        .then((token) => {
+          setAccessToken(token);
+        })
+        .catch((error) => {
+          console.error('Error getting access token', error);
+        });
     }
+  }, []);
+
+  // Fetch Fitbit data
+  const fetchFitbitData = () => {
+    axios
+      .get('https://api.fitbit.com/1/user/-/activities/heart/date/today/1d.json', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+      .then((response) => {
+        setFitbitData(response.data['activities-heart']);
+      })
+      .catch((error) => {
+        console.error('Error fetching Fitbit data', error);
+      });
   };
 
   return (
     <div>
-      <h1>Calorie Burn Prediction</h1>
-      <form onSubmit={handleSubmit}>
+      <h1>Fitbit Data Integration</h1>
+      {!accessToken ? (
+        <button onClick={() => authClient.authorize()}>Connect Fitbit</button>
+      ) : (
         <div>
-          <label>Exercise Type:</label>
-          <select value={exerciseType} onChange={(e) => setExerciseType(e.target.value)}>
-            <option value="">Select</option>
-            <option value="squat">Squat</option>
-            <option value="bench_press">Bench Press</option>
-            <option value="deadlift">Deadlift</option>
-            <option value="push_up">Push Up</option>
-            <option value="other">Other</option>
-          </select>
+          <button onClick={fetchFitbitData}>Fetch Fitbit Data</button>
+          {fitbitData && (
+            <div>
+              <h3>Heart Rate Data:</h3>
+              <pre>{JSON.stringify(fitbitData, null, 2)}</pre>
+            </div>
+          )}
         </div>
-        <div>
-          <label>Duration (minutes):</label>
-          <input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} />
-        </div>
-        <div>
-          <label>Intensity:</label>
-          <select value={intensity} onChange={(e) => setIntensity(e.target.value)}>
-            <option value="">Select</option>
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-          </select>
-        </div>
-        <div>
-          <label>Weight (kg):</label>
-          <input type="number" value={weight} onChange={(e) => setWeight(e.target.value)} />
-        </div>
-        <button type="submit">Predict Calories</button>
-      </form>
-      
-      {calories !== null && <h2>Calories Burned: {calories}</h2>}
+      )}
     </div>
   );
 }
 
 export default App;
+
