@@ -83,7 +83,7 @@ def predict_calories_with_fitbit():
     });
 };
 
-
+#todo done
 
 if __name__ == '__main__':
     app.run(debug=True)
